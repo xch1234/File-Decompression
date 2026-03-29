@@ -1,0 +1,21 @@
+{
+  "name": "Zip Extractor Online",
+  "short_name": "ZipExtract",
+  "description": "Extract and download files from your archives instantly.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "https://picsum.photos/seed/zip/192/192",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://picsum.photos/seed/zip/512/512",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
