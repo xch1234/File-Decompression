@@ -159,9 +159,62 @@ export default function App() {
   const downloadAll = async () => {
     if (files.length === 0) return;
     
-    for (const file of files) {
-      await downloadFile(file);
-      await new Promise(resolve => setTimeout(resolve, 100));
+    if (Capacitor.isNativePlatform()) {
+      try {
+        setIsProcessing(true);
+        setError(null);
+        const uris: string[] = [];
+        const folderName = `extracted_${Date.now()}`;
+
+        // 1. 创建一个临时子文件夹以保持组织
+        await Filesystem.mkdir({
+          path: folderName,
+          directory: Directory.Cache,
+          recursive: true
+        });
+
+        // 2. 循环将所有文件写入该文件夹
+        for (const file of files) {
+          const base64Data = await blobToBase64(file.data);
+          
+          // 处理 ZIP 中的子目录结构
+          const pathParts = file.name.split('/');
+          if (pathParts.length > 1) {
+            const subPath = pathParts.slice(0, -1).join('/');
+            await Filesystem.mkdir({
+              path: `${folderName}/${subPath}`,
+              directory: Directory.Cache,
+              recursive: true
+            });
+          }
+
+          const result = await Filesystem.writeFile({
+            path: `${folderName}/${file.name}`,
+            data: base64Data,
+            directory: Directory.Cache,
+          });
+          uris.push(result.uri);
+        }
+
+        // 3. 一次性分享所有文件
+        // 注意：在安卓上，这会允许您选择“保存到文件”并一次性保存所有选中的文件
+        await Share.share({
+          title: 'All Extracted Files',
+          files: uris,
+        });
+
+      } catch (err: any) {
+        console.error('Download all error:', err);
+        setError(`Failed to save all files: ${err.message || 'Unknown error'}`);
+      } finally {
+        setIsProcessing(false);
+      }
+    } else {
+      // 网页版保持原样（浏览器限制，只能一个一个触发）
+      for (const file of files) {
+        await downloadFile(file);
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
     }
   };
 
