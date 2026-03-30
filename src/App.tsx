@@ -10,10 +10,14 @@ import {
   Loader2,
   FolderOpen,
   ChevronRight,
-  HardDrive
+  HardDrive,
+  Share2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 
 interface ExtractedFile {
   name: string;
@@ -92,22 +96,61 @@ export default function App() {
     if (file) processZip(file);
   };
 
-  const downloadFile = (file: ExtractedFile) => {
-    const url = URL.createObjectURL(file.data);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = file.name.split('/').pop() || 'file';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = (reader.result as string).split(',')[1];
+        resolve(base64String);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  const downloadFile = async (file: ExtractedFile) => {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        setIsProcessing(true);
+        const base64Data = await blobToBase64(file.data);
+        const fileName = file.name.split('/').pop() || 'file';
+        
+        // Write to cache directory (temporary storage)
+        const result = await Filesystem.writeFile({
+          path: fileName,
+          data: base64Data,
+          directory: Directory.Cache,
+        });
+
+        // Share the file - this opens the native share/save dialog
+        await Share.share({
+          title: fileName,
+          text: `Extracted file: ${fileName}`,
+          url: result.uri,
+        });
+      } catch (err) {
+        console.error('Capacitor download error:', err);
+        setError('Failed to save file to device. Please check app permissions.');
+      } finally {
+        setIsProcessing(false);
+      }
+    } else {
+      const url = URL.createObjectURL(file.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name.split('/').pop() || 'file';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
   };
 
   const downloadAll = async () => {
     if (files.length === 0) return;
     
     for (const file of files) {
-      downloadFile(file);
+      await downloadFile(file);
       await new Promise(resolve => setTimeout(resolve, 100));
     }
   };
@@ -257,10 +300,10 @@ export default function App() {
                       </div>
                       <button 
                         onClick={() => downloadFile(file)}
-                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                        title="Download file"
+                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all flex items-center gap-2"
+                        title={Capacitor.isNativePlatform() ? "Share/Save file" : "Download file"}
                       >
-                        <Download className="w-5 h-5" />
+                        {Capacitor.isNativePlatform() ? <Share2 className="w-5 h-5" /> : <Download className="w-5 h-5" />}
                       </button>
                     </motion.div>
                   ))}
