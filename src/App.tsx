@@ -99,42 +99,52 @@ export default function App() {
   const blobToBase64 = (blob: Blob): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = (reader.result as string).split(',')[1];
-        resolve(base64String);
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64 = result.split(',')[1];
+        if (base64) resolve(base64);
+        else reject(new Error('Base64 conversion failed'));
       };
-      reader.onerror = reject;
+      reader.onerror = () => reject(new Error('Read error'));
       reader.readAsDataURL(blob);
     });
   };
 
   const downloadFile = async (file: ExtractedFile) => {
+    console.log('Download initiated for:', file.name);
+    
     if (Capacitor.isNativePlatform()) {
       try {
         setIsProcessing(true);
+        setError(null);
+        
         const base64Data = await blobToBase64(file.data);
         const fileName = file.name.split('/').pop() || 'file';
         
-        // Write to cache directory (temporary storage)
+        // 1. 写入临时文件
         const result = await Filesystem.writeFile({
           path: fileName,
           data: base64Data,
           directory: Directory.Cache,
         });
 
-        // Share the file - this opens the native share/save dialog
+        console.log('File written to:', result.uri);
+
+        // 2. 调用原生分享/保存
         await Share.share({
           title: fileName,
-          text: `Extracted file: ${fileName}`,
+          text: `Saving ${fileName}`,
           url: result.uri,
         });
-      } catch (err) {
-        console.error('Capacitor download error:', err);
-        setError('Failed to save file to device. Please check app permissions.');
+        
+      } catch (err: any) {
+        console.error('Native download error:', err);
+        setError(`Save failed: ${err.message || 'Unknown error'}`);
       } finally {
         setIsProcessing(false);
       }
     } else {
+      // 网页版逻辑
       const url = URL.createObjectURL(file.data);
       const a = document.createElement('a');
       a.href = url;
